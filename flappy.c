@@ -26,6 +26,7 @@ int up = 0;
 int bird_x, bird_y;
 int column_x;
 int numCols;
+int columns_passed;
 jmp_buf env;
 
 typedef struct Column {
@@ -44,6 +45,7 @@ void main_loop();
 
 
 void game_over(){
+	erase();
 	struct itimerval iv;
 	iv.it_interval.tv_sec = 0;
 	iv.it_interval.tv_usec = 0;
@@ -51,16 +53,9 @@ void game_over(){
 	iv.it_value.tv_usec = 0;
 
 	setitimer(ITIMER_REAL, &iv, NULL);
-
-	mvprintw((LINES / 2) - 2, (COLS / 2 ) - 12, "--------------------------");
-	mvprintw((LINES / 2) - 1, (COLS / 2 ) - 12, "|                        |");
-	mvprintw((LINES / 2) - 0, (COLS / 2 ) - 12, "|                        |");
-	mvprintw((LINES / 2) + 1, (COLS / 2 ) - 12, "|                        |");
-	mvprintw((LINES / 2) + 2, (COLS / 2 ) - 12, "|                        |");
-	mvprintw((LINES / 2) + 2, (COLS / 2 ) - 12, "--------------------------");
-	mvprintw((LINES / 2) - 1, (COLS / 2) - 8, "You lose: neet");
-	mvprintw((LINES / 2), (COLS / 2) - 8, "Restart: r");
-	mvprintw((LINES / 2) + 1, (COLS / 2) - 8, "Quit: q");
+	mvprintw((LINES / 2) - 1, (COLS / 2) - 4, "Score: %d", columns_passed);
+	mvprintw((LINES / 2), (COLS / 2) - 8, "press r to restart");
+	mvprintw((LINES / 2) + 1, (COLS / 2) - 8, "press q to quit");
 	refresh();
 	for(;;){
 		chtype ch = getch();
@@ -157,7 +152,6 @@ void update_columns(){
 void collision_detection(){
 	if(middle != NULL){
 		if(bird_y <= (middle->height + 0) || (bird_y + 1) >= (middle->height + TUNNEL_HEIGHT )){
-			fprintf(stderr, "moddle-height; %d; bird_y: %d; TUNNEL_GEIGHT %ld;\n", middle->height, bird_y, (long) TUNNEL_HEIGHT);
 			game_over();	
 		}
 	}
@@ -214,6 +208,9 @@ void handle_frame(int sig){
 					(((columns+i)->x + 1 + COLUMN_WIDTH) > bird_x)){
 			middle = (columns+i);
 		}
+		if((columns + i)->x == bird_x - COLUMN_WIDTH - 2){
+			columns_passed++;
+		}
 
 		(columns + i)->x -= 1;
 	}
@@ -237,6 +234,7 @@ void handle_frame(int sig){
 	erase();
 	update_columns();
 	paint_bird();
+	mvprintw(LINES - 1,0, "Score:  %d", columns_passed);
 	refresh();
 }
 
@@ -285,6 +283,7 @@ void init_game(){
 	bird_x = (COLS / 2) - 4;
 	bird_y = (LINES / 2) + 1;
 	column_x = COLS + 1;
+	columns_passed = 0;
 
 	init_columns();
 }
