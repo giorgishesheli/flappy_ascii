@@ -1,18 +1,22 @@
 #define _POSIX_C_SOURCE  199309L
+#define _DEFAULT_SOURCE
 #include <ncurses.h>
 #include <signal.h>
+#include <setjmp.h>
 #include <stdlib.h>
 #include <unistd.h> // pause
 #include <sys/time.h>
 #include <time.h>
 
-#define FLAP 1
-#define NOFLAP 0
-
 #define COLUMN_WIDTH 5
 #define COLUMN_BETWEEN_WIDTH 20
 #define TUNNEL_HEIGHT 10
 #define BIRD_WIDTH 8
+
+
+#define BIRD_COLOR 1
+#define BICK_COLOR 2
+
 
 
 
@@ -22,6 +26,7 @@ int up = 0;
 int bird_x, bird_y;
 int column_x;
 int numCols;
+jmp_buf env;
 
 typedef struct Column {
 	int x;
@@ -33,6 +38,8 @@ Column *columns;
 Column *first, *last, *middle;
 
 
+void init_game();
+void main_loop();
 
 
 
@@ -44,12 +51,31 @@ void game_over(){
 	iv.it_value.tv_usec = 0;
 
 	setitimer(ITIMER_REAL, &iv, NULL);
-	mvprintw((LINES / 2) - 1, (COLS / 2 ) - 12, "                        ");
-	mvprintw((LINES / 2), (COLS / 2 ) - 12, "                        ");
-	mvprintw((LINES / 2) + 1, (COLS / 2 ) - 12, "                        ");
-	mvprintw(LINES / 2, (COLS / 2) - 8, "Game Over: Try again");
+
+	mvprintw((LINES / 2) - 2, (COLS / 2 ) - 12, "--------------------------");
+	mvprintw((LINES / 2) - 1, (COLS / 2 ) - 12, "|                        |");
+	mvprintw((LINES / 2) - 0, (COLS / 2 ) - 12, "|                        |");
+	mvprintw((LINES / 2) + 1, (COLS / 2 ) - 12, "|                        |");
+	mvprintw((LINES / 2) + 2, (COLS / 2 ) - 12, "|                        |");
+	mvprintw((LINES / 2) + 2, (COLS / 2 ) - 12, "--------------------------");
+	mvprintw((LINES / 2) - 1, (COLS / 2) - 8, "You lose: neet");
+	mvprintw((LINES / 2), (COLS / 2) - 8, "Restart: r");
+	mvprintw((LINES / 2) + 1, (COLS / 2) - 8, "Quit: q");
 	refresh();
-	pause();
+	for(;;){
+		chtype ch = getch();
+		switch(ch){
+			case 'q':
+				endwin();
+				exit(EXIT_SUCCESS);
+				break;
+			case 'r':
+				longjmp(env, 3);
+				break;
+			default:
+				continue;
+		}
+	}
 }
 
 int get_random_height(){
@@ -58,12 +84,32 @@ int get_random_height(){
 
 void paint_bird(){
 	if(flappy > 0){
-		mvprintw(bird_y, bird_x, ".\\\\_(.)>");
-		mvprintw(bird_y + 1, bird_x, "");
+		move(bird_y, bird_x);
+		addch('.' | COLOR_PAIR(BIRD_COLOR));
+		addch('\\' | COLOR_PAIR(BIRD_COLOR));
+		addch('\\' | COLOR_PAIR(BIRD_COLOR));
+		addch('_' | COLOR_PAIR(BIRD_COLOR));
+		addch('(' | COLOR_PAIR(BIRD_COLOR));
+		addch('.');
+		addch(')' | COLOR_PAIR(BIRD_COLOR));
+		addch('>' | COLOR_PAIR(BICK_COLOR));
+		
 		flappy -= 1;
 	}else  {
-		mvprintw(bird_y, bird_x, ".  _(.)>");
-		mvprintw(bird_y + 1, bird_x, " //");
+		move(bird_y, bird_x);
+		addch('.' | COLOR_PAIR(BIRD_COLOR));
+		addch(' ' | COLOR_PAIR(BIRD_COLOR));
+		addch(' ' | COLOR_PAIR(BIRD_COLOR));
+		addch('_' | COLOR_PAIR(BIRD_COLOR));
+		addch('(' | COLOR_PAIR(BIRD_COLOR));
+		addch('.');
+		addch(')' | COLOR_PAIR(BIRD_COLOR));
+		addch('>' | COLOR_PAIR(BICK_COLOR));
+		move(bird_y + 1, bird_x);
+		addch(' ' | COLOR_PAIR(BIRD_COLOR));
+		addch('/' | COLOR_PAIR(BIRD_COLOR));
+		addch('/' | COLOR_PAIR(BIRD_COLOR));
+
 	}
 }
 
@@ -75,16 +121,16 @@ void update_columns(){
 	while(col->next != NULL){
 		column_x = col->x;
 		length_u = col->height;
-		for(i = 0; i <= (length_u - 1); i++){
+		for(i = 0; i < (length_u - 1); i++){
 			mvaddch(i, column_x, '|');
 			mvaddch(i, column_x + COLUMN_WIDTH, '|');
 		}
-		mvaddch(length_u - 1, column_x - 1, '_');
-		mvaddch(length_u - 1, column_x + COLUMN_WIDTH + 1, '_');
-		mvaddch(length_u, column_x - 2, '|');
-		mvaddch(length_u, column_x + COLUMN_WIDTH + 2, '|');
+		mvaddch(length_u - 2, column_x - 1, '_');
+		mvaddch(length_u - 2, column_x + COLUMN_WIDTH + 1, '_');
+		mvaddch(length_u - 1, column_x - 2, '|');
+		mvaddch(length_u - 1 , column_x + COLUMN_WIDTH + 2, '|');
 		for(i = 0; i <= COLUMN_WIDTH + 2; i++){
-			mvaddch(length_u, column_x - 1 + i, '_');
+			mvaddch(length_u - 1, column_x - 1 + i, '_');
 		}
 
 
@@ -110,8 +156,8 @@ void update_columns(){
 
 void collision_detection(){
 	if(middle != NULL){
-		if(bird_y <= middle->height || (bird_y + 1) >= (middle->height + TUNNEL_HEIGHT )){
-			//fprintf(stderr, "collision\n");
+		if(bird_y <= (middle->height + 0) || (bird_y + 1) >= (middle->height + TUNNEL_HEIGHT )){
+			fprintf(stderr, "moddle-height; %d; bird_y: %d; TUNNEL_GEIGHT %ld;\n", middle->height, bird_y, (long) TUNNEL_HEIGHT);
 			game_over();	
 		}
 	}
@@ -141,7 +187,6 @@ void init_columns(){
 
 
 void handle_frame(int sig){
-	//fprintf(stderr, "%d\n",  rand() % ((int)(LINES * 0.7) + 1 - (int)(LINES * 0.3)) + (int)(LINES * 0.3));
 	if(bird_y > LINES || bird_y < -5){
 		game_over();
 	}
@@ -172,8 +217,8 @@ void handle_frame(int sig){
 
 		(columns + i)->x -= 1;
 	}
+
 	collision_detection();
-	//fprintf(stderr, "%p\n", (void *) middle);
 
 	if(up > 0){
 		bird_y -= 2;
@@ -195,28 +240,39 @@ void handle_frame(int sig){
 	refresh();
 }
 
-
-int main(){
+void init_ncurses(){
 	// Init Ncuses
 	initscr();
-	cbreak();
+	//cbreak();
+	raw();
 	noecho();
+	start_color();
 	curs_set(0);
 
+	// Init colors
+	use_default_colors();
+	init_pair(BIRD_COLOR,  -1, -1);
+	init_pair(BICK_COLOR, -1, -1);
 
+
+
+}
+
+void init_game(){
+	erase();
+	refresh();
 	srand(time(NULL));
 
 	
 	struct sigaction sa;
 	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = 0;
+	sa.sa_flags = SA_RESTART;
 	sa.sa_handler = handle_frame;
 	if(sigaction(SIGALRM, &sa, NULL) == -1){
 		perror("sigaction");
 		endwin();
 		exit(EXIT_FAILURE);
 	}
-	refresh();
 
 	struct itimerval iv;
 	iv.it_interval.tv_sec = 0;
@@ -225,22 +281,42 @@ int main(){
 	iv.it_value.tv_usec = 50000;
 
 	setitimer(ITIMER_REAL, &iv, NULL);
-
+	
 	bird_x = (COLS / 2) - 4;
 	bird_y = (LINES / 2) + 1;
 	column_x = COLS + 1;
 
-
-
 	init_columns();
+}
 
+void main_loop(){
+	sigset_t st;
+	sigemptyset(&st);
+	sigprocmask(SIG_SETMASK, &st, NULL);
 	for(;;){
 		chtype ch = getchar();
-		if(ch == 'j'){
-			up = 5;
-			flappy += 4;
+		switch(ch){
+			case 'j':
+				up = 5;
+				flappy += 4;
+				break;
+
+			default:
+				continue;
 		}
 	}
+}
+
+
+int main(){
+
+
+	init_ncurses();
+	setjmp(env);
+	init_game();
+
+
+	main_loop();
 
 	
 
