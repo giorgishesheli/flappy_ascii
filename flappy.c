@@ -12,6 +12,7 @@
 #define COLUMN_WIDTH 5
 #define COLUMN_BETWEEN_WIDTH 20
 #define TUNNEL_HEIGHT 10
+#define BIRD_WIDTH 8
 
 
 
@@ -29,7 +30,8 @@ typedef struct Column {
 } Column;
 
 Column *columns;
-Column *first, *last;
+Column *first, *last, *middle;
+
 
 
 
@@ -42,7 +44,9 @@ void game_over(){
 	iv.it_value.tv_usec = 0;
 
 	setitimer(ITIMER_REAL, &iv, NULL);
-	erase();
+	mvprintw((LINES / 2) - 1, (COLS / 2 ) - 12, "                        ");
+	mvprintw((LINES / 2), (COLS / 2 ) - 12, "                        ");
+	mvprintw((LINES / 2) + 1, (COLS / 2 ) - 12, "                        ");
 	mvprintw(LINES / 2, (COLS / 2) - 8, "Game Over: Try again");
 	refresh();
 	pause();
@@ -53,14 +57,13 @@ int get_random_height(){
 }
 
 void paint_bird(){
-	erase();
 	if(flappy > 0){
-		mvprintw(bird_y, bird_x, "\\.\\\\_(.)>");
-		mvprintw(bird_y + 1, bird_x, "/");
+		mvprintw(bird_y, bird_x, ".\\\\_(.)>");
+		mvprintw(bird_y + 1, bird_x, "");
 		flappy -= 1;
 	}else  {
-		mvprintw(bird_y, bird_x, "\\.  _(.)>");
-		mvprintw(bird_y + 1, bird_x, "/ //");
+		mvprintw(bird_y, bird_x, ".  _(.)>");
+		mvprintw(bird_y + 1, bird_x, " //");
 	}
 }
 
@@ -105,8 +108,19 @@ void update_columns(){
 
 }
 
+void collision_detection(){
+	if(middle != NULL){
+		if(bird_y <= middle->height || (bird_y + 1) >= (middle->height + TUNNEL_HEIGHT )){
+			//fprintf(stderr, "collision\n");
+			game_over();	
+		}
+	}
+
+}
+
 void init_columns(){
-	numCols = (COLS / (COLUMN_WIDTH + COLUMN_BETWEEN_WIDTH)) + 2;
+	numCols = (COLS / (COLUMN_WIDTH + COLUMN_BETWEEN_WIDTH)) + 3;
+	middle = NULL;
 	columns = calloc(numCols,  sizeof(Column)); // TODO - Error Cheking
 	int i;
 	columns->x = COLS;
@@ -128,7 +142,7 @@ void init_columns(){
 
 void handle_frame(int sig){
 	//fprintf(stderr, "%d\n",  rand() % ((int)(LINES * 0.7) + 1 - (int)(LINES * 0.3)) + (int)(LINES * 0.3));
-	if(bird_y == LINES || bird_y == -5){
+	if(bird_y > LINES || bird_y < -5){
 		game_over();
 	}
 	frame++;
@@ -144,18 +158,40 @@ void handle_frame(int sig){
 		cur->height = get_random_height();
 		cur->next = NULL;
 	}
+	
+
+	static int acc = 2;
+	static int cnt = 0;
+	
+	middle = NULL;
 	for(i = 0; i < numCols; i++){
+		if((((columns + i)->x - 1) < (bird_x + BIRD_WIDTH)) &&
+					(((columns+i)->x + 1 + COLUMN_WIDTH) > bird_x)){
+			middle = (columns+i);
+		}
+
 		(columns + i)->x -= 1;
 	}
+	collision_detection();
+	//fprintf(stderr, "%p\n", (void *) middle);
 
 	if(up > 0){
 		bird_y -= 2;
 		up -= 2;
-	} else if(frame % 2 == 0){
+		cnt = 0;
+		acc = 2;
+	} else if(frame % acc == 0){
 		bird_y += 1;
+		cnt++;
 	}
-	paint_bird();
+	if(cnt == 3){
+		acc = 1;
+		cnt = 0;
+	}
+	
+	erase();
 	update_columns();
+	paint_bird();
 	refresh();
 }
 
